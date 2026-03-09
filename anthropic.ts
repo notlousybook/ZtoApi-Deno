@@ -16,9 +16,14 @@ function simpleTokenize(text: string): number {
 /**
  * Anthropic API interfaces
  */
+interface AnthropicCacheControl {
+  type: "ephemeral";
+}
+
 interface AnthropicTextContent {
   type: "text";
   text: string;
+  cache_control?: AnthropicCacheControl;
 }
 
 interface AnthropicImageContent {
@@ -74,7 +79,7 @@ interface AnthropicMessagesRequest {
   model: string;
   max_tokens?: number;
   messages: AnthropicMessage[];
-  system?: string | Array<{ type: "text"; text: string }>;
+  system?: string | Array<{ type: "text"; text: string; cache_control?: AnthropicCacheControl }>;
   temperature?: number;
   top_p?: number;
   top_k?: number;
@@ -82,6 +87,7 @@ interface AnthropicMessagesRequest {
   stop_sequences?: string[];
   tools?: AnthropicTool[];
   tool_choice?: AnthropicToolChoice;
+  metadata?: Record<string, unknown>;
 }
 
 interface AnthropicUsage {

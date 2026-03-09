@@ -64,6 +64,32 @@ export async function handleAnthropicMessages(request: Request): Promise<Respons
   debugLog("Received Anthropic messages request");
   debugLog("🌐 User-Agent: %s", userAgent);
 
+  // Process Anthropic beta flags for Claude Code compatibility
+  const betaFlags = request.headers.get("anthropic-beta") || "";
+  if (betaFlags) {
+    debugLog("🚀 Anthropic beta flags: %s", betaFlags);
+
+    // Parse beta flags to detect Claude Code and other features
+    const betaFeatures = betaFlags.split(",").map((flag) => flag.trim());
+    const isClaudeCode = betaFeatures.includes("claude-code-20250219");
+    const hasFineGrainedToolStreaming = betaFeatures.includes("fine-grained-tool-streaming-2025-05-14");
+    const hasInterleavedThinking = betaFeatures.includes("interleaved-thinking-2025-05-14");
+    const hasTokenCounting = betaFeatures.includes("token-counting-2024-11-01");
+
+    if (isClaudeCode) {
+      debugLog("🤖 Claude Code request detected");
+    }
+    if (hasFineGrainedToolStreaming) {
+      debugLog("🔧 Fine-grained tool streaming enabled");
+    }
+    if (hasInterleavedThinking) {
+      debugLog("🧠 Interleaved thinking enabled");
+    }
+    if (hasTokenCounting) {
+      debugLog("🔢 Token counting beta enabled");
+    }
+  }
+
   const headers = new Headers();
   setCORSHeaders(headers);
 
@@ -117,11 +143,33 @@ export async function handleAnthropicMessages(request: Request): Promise<Respons
 
   debugLog("Anthropic API key validated");
 
-  // Read request body
+  // Read request body with optimized handling for large payloads
   let body: string;
   try {
+    const contentLength = request.headers.get("content-length");
+    if (contentLength) {
+      const size = parseInt(contentLength, 10);
+      debugLog("📥 Content-Length header: %d bytes", size);
+
+      // Warn about large payloads
+      if (size > 10 * 1024 * 1024) { // 10MB
+        debugLog("⚠️ Very large request detected: %d bytes", size);
+      } else if (size > 1024 * 1024) { // 1MB
+        debugLog("📊 Large request detected: %d bytes", size);
+      }
+    }
+
     body = await request.text();
     debugLog("📥 Received Anthropic body length: %d chars", body.length);
+
+    // Log payload size categories for debugging
+    if (body.length > 50000) {
+      debugLog("🦣 Large payload detected: %d chars (Claude Code style request)", body.length);
+    } else if (body.length > 10000) {
+      debugLog("📋 Medium payload: %d chars", body.length);
+    } else {
+      debugLog("📝 Small payload: %d chars", body.length);
+    }
   } catch (error) {
     debugLog("Failed to read Anthropic request body: %v", error);
     const duration = Date.now() - startTime;
@@ -142,13 +190,22 @@ export async function handleAnthropicMessages(request: Request): Promise<Respons
     );
   }
 
-  // Parse JSON
+  // Parse JSON with performance monitoring for large payloads
   let anthropicReq: AnthropicMessagesRequest;
   try {
+    const parseStartTime = Date.now();
     anthropicReq = JSON.parse(body) as AnthropicMessagesRequest;
-    debugLog("✅ Anthropic JSON parsed successfully");
+    const parseDuration = Date.now() - parseStartTime;
+    debugLog("✅ Anthropic JSON parsed successfully in %dms", parseDuration);
+
+    // Log parsing performance for large payloads
+    if (body.length > 50000 && parseDuration > 100) {
+      debugLog("⚠️ Slow JSON parsing detected: %dms for %d chars", parseDuration, body.length);
+    }
   } catch (error) {
     debugLog("Anthropic JSON parse failed: %v", error);
+    debugLog("🔍 Failed JSON length: %d chars", body.length);
+    debugLog("🔍 JSON preview: %s", body.substring(0, 200) + (body.length > 200 ? "..." : ""));
     const duration = Date.now() - startTime;
     recordRequestStats(startTime, path, 400);
     addLiveRequest(request.method, path, 400, duration, userAgent);
@@ -165,6 +222,46 @@ export async function handleAnthropicMessages(request: Request): Promise<Respons
         headers: { ...headers, "Content-Type": "application/json" },
       },
     );
+  }
+
+  // Process cache control and metadata for Claude Code compatibility
+  if (anthropicReq.system && Array.isArray(anthropicReq.system)) {
+    let cacheControlCount = 0;
+    for (const systemBlock of anthropicReq.system) {
+      if (systemBlock.cache_control) {
+        cacheControlCount++;
+        debugLog("🗄️ System block has cache_control: %s", systemBlock.cache_control.type);
+      }
+    }
+    if (cacheControlCount > 0) {
+      debugLog("📊 Found %d system blocks with cache_control", cacheControlCount);
+    }
+  }
+
+  // Process message cache controls
+  if (anthropicReq.messages) {
+    let messageCacheControlCount = 0;
+    for (const message of anthropicReq.messages) {
+      if (Array.isArray(message.content)) {
+        for (const contentBlock of message.content) {
+          if (contentBlock.type === "text" && contentBlock.cache_control) {
+            messageCacheControlCount++;
+            debugLog("🗄️ Message content block has cache_control: %s", contentBlock.cache_control.type);
+          }
+        }
+      }
+    }
+    if (messageCacheControlCount > 0) {
+      debugLog("📊 Found %d message content blocks with cache_control", messageCacheControlCount);
+    }
+  }
+
+  // Process metadata if present
+  if (anthropicReq.metadata) {
+    debugLog("📋 Request metadata: %s", JSON.stringify(anthropicReq.metadata));
+    if (anthropicReq.metadata.user_id) {
+      debugLog("👤 User ID from metadata: %s", anthropicReq.metadata.user_id);
+    }
   }
 
   // Validate tools if present

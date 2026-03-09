@@ -9,8 +9,7 @@ import { addLiveRequest, recordRequestStats } from "../utils/stats.ts";
 import { setCORSHeaders } from "../utils/helpers.ts";
 import { processMessages, validateTools } from "../utils/validation.ts";
 import { getAnonymousToken } from "../services/anonymous-token.ts";
-import { callUpstreamWithHeaders } from "../services/upstream-caller.ts";
-import { collectFullResponse, processUpstreamStream } from "../utils/stream.ts";
+import { getUpstreamClient } from "../services/upstream-client.ts";
 
 /**
  * Debug logging function - will be injected
@@ -150,7 +149,7 @@ export async function handleChatCompletions(request: Request): Promise<Response>
   // Create upstream request
   const upstreamReq: UpstreamRequest = {
     stream: isStreaming,
-    model: modelConfig.upstreamId,
+    model: model,
     messages: processedMessages,
     params: {
       top_p: modelConfig.defaultParams.top_p,
@@ -161,15 +160,16 @@ export async function handleChatCompletions(request: Request): Promise<Response>
       thinking: modelConfig.capabilities.thinking,
       ...(modelConfig.capabilities.vision && { vision: true }),
     },
-    chat_id: `chat_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+    enable_thinking: modelConfig.capabilities.thinking,
   };
 
   debugLog("Created upstream request");
 
-  // Call upstream
+  // Call upstream using new upstream client
   let response: Response;
   try {
-    response = await callUpstreamWithHeaders(upstreamReq, upstreamReq.chat_id!, authToken);
+    const upstreamClient = await getUpstreamClient();
+    response = await upstreamClient.chatCompletion(upstreamReq, modelConfig);
   } catch (error) {
     debugLog("Upstream request failed: %v", error);
     const duration = Date.now() - startTime;
@@ -186,120 +186,7 @@ export async function handleChatCompletions(request: Request): Promise<Response>
   recordRequestStats(startTime, path, response.status);
   addLiveRequest(request.method, path, response.status, duration, userAgent, model);
 
-  // Handle streaming or non-streaming
-  if (isStreaming) {
-    return handleStreamResponse(response, headers, model, startTime);
-  } else {
-    return handleNonStreamResponse(response, headers, model, startTime);
-  }
-}
-
-/**
- * Handle streaming response
- */
-export async function handleStreamResponse(
-  upstreamResponse: Response,
-  headers: Headers,
-  modelName: string,
-  _startTime: number,
-): Promise<Response> {
-  if (!upstreamResponse.body) {
-    const response = new Response("No response body from upstream", {
-      status: 500,
-      headers,
-    });
-    // Dummy await to satisfy lint
-    await Promise.resolve();
-    return response;
-  }
-
-  const encoder = new TextEncoder();
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
-
-  // Set up headers for streaming
+  // Upstream client already returns properly formatted response, just add CORS headers
   setCORSHeaders(headers);
-  headers.set("Content-Type", "text/event-stream");
-  headers.set("Cache-Control", "no-cache");
-  headers.set("Connection", "keep-alive");
-
-  // Process the upstream stream
-  processUpstreamStream(
-    upstreamResponse.body,
-    writer,
-    encoder,
-    modelName,
-  ).catch((error) => {
-    debugLog("Error processing stream: %v", error);
-  });
-
-  const response = new Response(stream.readable, {
-    status: upstreamResponse.status,
-    headers,
-  });
-
-  // Dummy await to satisfy lint
-  await Promise.resolve();
-
   return response;
-}
-
-/**
- * Handle non-streaming response
- */
-export async function handleNonStreamResponse(
-  upstreamResponse: Response,
-  headers: Headers,
-  modelName: string,
-  _startTime: number,
-): Promise<Response> {
-  if (!upstreamResponse.ok) {
-    const errorBody = await upstreamResponse.text();
-    debugLog("Upstream error: %s", errorBody);
-    return new Response("Upstream service returned an error", {
-      status: upstreamResponse.status,
-      headers,
-    });
-  }
-
-  if (!upstreamResponse.body) {
-    return new Response("No response body from upstream", {
-      status: 500,
-      headers,
-    });
-  }
-
-  try {
-    const result = await collectFullResponse(upstreamResponse.body);
-    const openaiResp: OpenAIResponse = {
-      id: `chatcmpl-${Date.now()}`,
-      object: "chat.completion",
-      created: Math.floor(Date.now() / 1000),
-      model: modelName,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: "assistant",
-            content: result.content,
-            ...(result.reasoning_content && { reasoning_content: result.reasoning_content }),
-          },
-          finish_reason: "stop",
-        },
-      ],
-      ...(result.usage && { usage: result.usage }),
-    };
-
-    headers.set("Content-Type", "application/json");
-    return new Response(JSON.stringify(openaiResp), {
-      status: 200,
-      headers,
-    });
-  } catch (error) {
-    debugLog("Failed to process response: %v", error);
-    return new Response("Failed to process response", {
-      status: 500,
-      headers,
-    });
-  }
 }

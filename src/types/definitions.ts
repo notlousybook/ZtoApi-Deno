@@ -160,8 +160,12 @@ export interface UpstreamRequest {
   stream: boolean;
   model: string;
   messages: Message[];
-  params: Record<string, unknown>;
-  features: Record<string, unknown>;
+  params?: Record<string, unknown>;
+  features?: Record<string, unknown>;
+  tools?: Tool[];
+  tool_choice?: "none" | "auto" | "required";
+  enable_thinking?: boolean;
+  web_search?: boolean;
   background_tasks?: Record<string, boolean>;
   chat_id?: string;
   id?: string;

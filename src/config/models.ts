@@ -17,6 +17,8 @@ export interface ModelConfig {
     vision: boolean;
     mcp: boolean;
     thinking: boolean;
+    search?: boolean;
+    advancedSearch?: boolean;
   };
   defaultParams: {
     top_p: number;
@@ -45,11 +47,57 @@ export const SUPPORTED_MODELS: ModelConfig[] = [
     },
   },
   {
+    id: "GLM-4.5-Thinking",
+    name: "GLM-4.5-Thinking",
+    upstreamId: "0727-360B-API",
+    capabilities: {
+      vision: false,
+      mcp: true,
+      thinking: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 80000,
+    },
+  },
+  {
+    id: "GLM-4.5-Search",
+    name: "GLM-4.5-Search",
+    upstreamId: "0727-360B-API",
+    capabilities: {
+      vision: false,
+      mcp: true,
+      thinking: true,
+      search: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 80000,
+    },
+  },
+  {
+    id: "GLM-4.5-Air",
+    name: "GLM-4.5-Air",
+    upstreamId: "0727-106B-API",
+    capabilities: {
+      vision: false,
+      mcp: true,
+      thinking: false,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 80000,
+    },
+  },
+  {
     id: "GLM-4-6-API-V1",
     name: "GLM-4.6",
     upstreamId: "GLM-4-6-API-V1",
     capabilities: {
-      vision: false,
+      vision: true,
       mcp: true,
       thinking: true,
     },
@@ -71,6 +119,84 @@ export const SUPPORTED_MODELS: ModelConfig[] = [
     defaultParams: {
       top_p: 0.6,
       temperature: 0.8,
+    },
+  },
+  {
+    id: "glm-5",
+    name: "GLM-5",
+    upstreamId: "glm-5",
+    capabilities: {
+      vision: true,
+      mcp: true,
+      thinking: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 200000,
+    },
+  },
+  {
+    id: "glm-4.7",
+    name: "GLM-4.7",
+    upstreamId: "glm-4.7",
+    capabilities: {
+      vision: true,
+      mcp: true,
+      thinking: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 200000,
+    },
+  },
+  {
+    id: "GLM-4.7-Thinking",
+    name: "GLM-4.7-Thinking",
+    upstreamId: "glm-4.7",
+    capabilities: {
+      vision: true,
+      mcp: true,
+      thinking: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 200000,
+    },
+  },
+  {
+    id: "GLM-4.7-Search",
+    name: "GLM-4.7-Search",
+    upstreamId: "glm-4.7",
+    capabilities: {
+      vision: true,
+      mcp: true,
+      thinking: true,
+      search: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 200000,
+    },
+  },
+  {
+    id: "GLM-4.7-advanced-search",
+    name: "GLM-4.7-advanced-search",
+    upstreamId: "glm-4.7",
+    capabilities: {
+      vision: true,
+      mcp: true,
+      thinking: true,
+      search: true,
+      advancedSearch: true,
+    },
+    defaultParams: {
+      top_p: 0.95,
+      temperature: 0.6,
+      max_tokens: 200000,
     },
   },
 ];
